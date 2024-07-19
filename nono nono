@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>lRestock</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@2.51.6/dist/full.css" rel="stylesheet" type="text/css" />
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.6.8/firebase-storage.js"></script>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    .active-tab {
+      @apply text-pink-500;
+    }
+  </style>
+</head>
+<body class="bg-base-200">
+  <div id="app" class="container mx-auto my-8">
+    <div v-show="!user" class="flex justify-center">
+      <div class="card bg-base-100 shadow-xl w-full max-w-md">
+        <div class="card-body">
+          <h2 class="card-title text-2xl font-bold mb-4 text-center">lRestock</h2>
+          <div v-show="showLoginForm">
+            <div class="form-control mb-4">
+              <label for="loginEmail" class="label">Email</label>
+              <input type="email" id="loginEmail" v-model="loginEmail" class="input input-bordered">
+            </div>
+            <div class="form-control mb-4">
+              <label for="loginPassword" class="label">Password</label>
+              <input type="password" id="loginPassword" v-model="loginPassword" class="input input-bordered">
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Buyer</span>
+                <input type="radio" name="userRole" value="buyer" v-model="userRole" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Seller</span>
+                <input type="radio" name="userRole" value="seller" v-model="userRole" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <button @click="login" class="btn btn-primary btn-block mt-4">
+              <span class="material-icons">login</span> Login
+            </button>
+            <button @click="loginAnonymously" class="btn btn-ghost btn-block mt-2">
+              <span class="material-icons">person_outline</span> Login as Guest
+            </button>
+          </div>
+          <div v-show="!showLoginForm">
+            <div class="form-control mb-4">
+              <label for="signupEmail" class="label">Email</label>
+              <input type="email" id="signupEmail" v-model="signupEmail" class="input input-bordered">
+            </div>
+            <div class="form-control mb-4">
+              <label for="signupPassword" class="label">Password</label>
+              <input type="password" id="signupPassword" v-model="signupPassword" class="input input-bordered">
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Buyer</span>
+                <input type="radio" name="userRole" value="buyer" v-model="userRole" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Seller</span>
+                <input type="radio" name="userRole" value="seller" v-model="userRole" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <button @click="signup" class="btn btn-success btn-block mt-4">
+              <span class="material-icons">person_add</span> Signup
+            </button>
+          </div>
+          <div class="text-center mt-6">
+            <button @click="toggleForm" class="link link-primary">
+              <span class="material-icons">{{ showLoginForm ? 'person_add' : 'login' }}</span> {{ showLoginForm ? 'Switch to Signup' : 'Switch to Login' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-show="user">
+      <div class="navbar bg-base-100 shadow-lg mb-6 flex justify-between items-center">
+        <h1 class="text-2xl font-bold">lRestock</h1>
+        <div>
+          <span class="mr-4 text-lg font-medium">{{ user && user.displayName ? user.displayName : user && user.email ? user.email : '' }}</span>
+          <div v-if="userRole === 'buyer'" class="relative inline-block">
+            <button @click="showCart = !showCart" class="btn btn-circle btn-primary mr-4 relative">
+              <span class="material-icons">shopping_cart</span>
+              <span v-if="cart.length > 0" class="absolute top-0 right-0 -mt-2 -mr-2 bg-red-500 text-white rounded-full px-2 py-1 text-xs font-bold">
+                {{ cart.length }}
+              </span>
+            </button>
+          </div>
+          <button @click="logout" class="btn btn-outline ml-4">
+            Logout
+          </button>
+        </div>
+      </div>
+      <div v-show="userRole === 'buyer' && activeTab === 'home'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div v-for="listing in listings" :key="listing.id" class="card bg-base-100 shadow-xl">
+          <figure><img :src="listing.imageUrl" alt="Listing Image" class="h-48 object-cover w-full" /></figure>
+          <div class="card-body">
+            <h2 class="card-title">{{ listing.title }}</h2>
+            <p>{{ listing.description }}</p>
+            <div class="card-actions justify-end mt-4">
+              <span class="text-lg font-semibold">${{ listing.price }}</span>
+              <div class="flex items-center">
+                <input type="number" v-model.number="listing.quantityToAdd" min="1" class="input input-bordered w-16 text-center mr-2" />
+                <button @click="addToCart(listing)" class="btn btn-primary btn-sm">Add to Cart</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'buyer' && activeTab === 'orders'" class="mt-4">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body p-6">
+            <h2 class="text-lg font-bold mb-4">My Orders</h2>
+            <div v-for="order in buyerOrders" :key="order.id" class="border-b border-gray-200 pb-4 mb-4 cursor-pointer" @click="showOrderDetails(order)">
+              <div class="flex items-center mb-2">
+                <div class="w-12 h-12 rounded-full overflow-hidden mr-4">
+                  <img src="https://via.placeholder.com/150" alt="Product Image" class="w-full h-full object-cover">
+                </div>
+                <div>
+                  <p class="font-medium">{{ order.shippingAddress.street }}</p>
+                  <p class="text-sm text-gray-600">{{ order.timestamp }}</p>
+                </div>
+              </div>
+            </div>
+            <p v-if="buyerOrders.length === 0" class="text-center text-gray-500">You have no orders yet.</p>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'seller' && activeTab === 'listings'" class="mt-4">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body p-6">
+            <h2 class="text-lg font-bold mb-4">My Listings</h2>
+            <button @click="showNewListingForm = true" class="btn btn-primary mb-4">Add New Listing</button>
+            <div v-for="listing in sellerListings" :key="listing.id" class="border-b border-gray-200 pb-4 mb-4">
+              <div class="flex items-center">
+                <div class="w-16 h-16 rounded-full overflow-hidden mr-4">
+                  <img :src="listing.imageUrl" alt="Listing Image" class="w-full h-full object-cover">
+                </div>
+                <div>
+                  <h3 class="font-medium">{{ listing.title }}</h3>
+                  <p class="text-sm text-gray-600">${{ listing.price }}</p>
+                </div>
+              </div>
+            </div>
+            <p v-if="sellerListings.length === 0" class="text-center text-gray-500">You have no listings yet.</p>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'seller' && activeTab === 'orders'" class="mt-4">
+        <div class="card bg-base-100 shadow-xl">
+          <div class="card-body p-6">
+            <h2 class="text-lg font-bold mb-4">Received Orders</h2>
+            <div v-for="order in sellerOrders" :key="order.id" class="border-b border-gray-200 pb-4 mb-4 cursor-pointer" @click="showOrderDetails(order)">
+              <div class="flex items-center mb-2">
+                <div class="w-12 h-12 rounded-full overflow-hidden mr-4">
+                  <img src="https://via.placeholder.com/150" alt="Product Image" class="w-full h-full object-cover">
+                </div>
+                <div>
+                  <p class="font-medium">{{ order.shippingAddress.street }}</p>
+                  <p class="text-sm text-gray-600">{{ order.timestamp }}</p>
+                </div>
+              </div>
+            </div>
+            <p v-if="sellerOrders.length === 0" class="text-center text-gray-500">You have no received orders yet.</p>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'buyer' && showCart" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50" @click.self="showCart = false">
+        <div class="card bg-base-100 shadow-xl w-96">
+          <div class="card-body">
+            <h2 class="card-title">Shopping Cart</h2>
+            <div v-if="cart.length === 0">
+              <p>Your cart is empty.</p>
+            </div>
+            <div v-else>
+              <div class="form-control mb-4">
+                <label for="shippingAddress" class="label">Shipping Address</label>
+                <input type="text" id="shippingAddress" v-model="shippingAddress.street" class="input input-bordered" placeholder="Street address">
+              </div>
+              <div class="grid grid-cols-3 gap-2">
+                <div class="form-control">
+                  <label for="city" class="label">City</label>
+                  <input type="text" id="city" v-model="shippingAddress.city" class="input input-bordered" placeholder="City">
+                </div>
+                <div class="form-control">
+                  <label for="state" class="label">State</label>
+                  <input type="text" id="state" v-model="shippingAddress.state" class="input input-bordered" placeholder="State">
+                </div>
+                <div class="form-control">
+                  <label for="zip" class="label">Zip</label>
+                  <input type="text" id="zip" v-model="shippingAddress.zip" class="input input-bordered" placeholder="Zip">
+                </div>
+              </div>
+              <div v-for="item in cart" :key="item.id" class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-medium">{{ item.title }}</h3>
+                  <p class="text-sm text-gray-500">${{ item.price }}</p>
+                </div>
+                <button @click="removeFromCart(item)" class="btn btn-error btn-sm">Remove</button>
+              </div>
+              <div class="flex justify-end">
+                <button class="btn btn-primary" @click="showCheckout = true">Checkout</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'buyer' && showCheckout" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+        <div class="card bg-base-100 shadow-xl w-96">
+          <div class="card-body">
+            <h2 class="card-title">Select Payment Method</h2>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Cash</span>
+                <input type="radio" name="paymentMethod" value="cash" v-model="paymentMethod" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Check</span>
+                <input type="radio" name="paymentMethod" value="check" v-model="paymentMethod" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <div class="form-control">
+              <label class="label cursor-pointer">
+                <span class="label-text">Credit</span>
+                <input type="radio" name="paymentMethod" value="credit" v-model="paymentMethod" class="radio checked:bg-blue-500">
+              </label>
+            </div>
+            <button class="btn btn-primary mt-4" @click="confirmOrder" :disabled="!paymentMethod">Confirm Order</button>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'buyer' && showOrderConfirmation" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50" @click.self="showOrderConfirmation = false">
+        <div class="card bg-base-100 shadow-xl w-96">
+          <div class="card-body text-center">
+            <h2 class="card-title text-2xl font-bold mb-4">Order Confirmed!</h2>
+            <p>Your order has been successfully registered. Thank you for shopping!</p>
+            <button @click="showOrderConfirmation = false" class="btn btn-primary mt-6">Close</button>
+          </div>
+        </div>
+      </div>
+      <div v-show="selectedOrder" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50" @click.self="selectedOrder = null">
+        <div class="card bg-base-100 shadow-xl w-96">
+          <div class="card-body">
+            <h2 class="card-title">Order Details</h2>
+            <div v-if="selectedOrder">
+              <p>Shipping Address: {{ selectedOrder.shippingAddress.street }}, {{ selectedOrder.shippingAddress.city }}, {{ selectedOrder.shippingAddress.state }} {{ selectedOrder.shippingAddress.zip }}</p>
+              <ul class="list-disc list-inside">
+                <li v-for="item in selectedOrder.items" :key="item.id" class="text-sm">
+                  {{ item.quantity }}x {{ item.title }} - ${{ item.price }}
+                </li>
+              </ul>
+              <p class="text-lg font-medium text-right mt-4">Total: ${{ selectedOrder.totalAmount.toFixed(2) }}</p>
+            </div>
+            <button @click="selectedOrder = null" class="btn btn-primary mt-6">Close</button>
+          </div>
+        </div>
+      </div>
+      <div v-show="userRole === 'seller' && showNewListingForm" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50" @click.self="showNewListingForm = false">
+        <div class="card bg-base-100 shadow-xl w-96">
+          <div class="card-body">
+            <h2 class="card-title">New Listing</h2>
+            <div class="form-control mb-4">
+              <label for="listingTitle" class="label">Title</label>
+              <input type="text" id="listingTitle" v-model="newListing.title" class="input input-bordered">
+            </div>
+            <div class="form-control mb-4">
+              <label for="listingDescription" class="label">Description</label>
+              <textarea id="listingDescription" v-model="newListing.description" class="textarea textarea-bordered"></textarea>
+            </div>
+            <div class="form-control mb-4">
+              <label for="listingPrice" class="label">Price</label>
+              <input type="number" id="listingPrice" v-model.number="newListing.price" class="input input-bordered">
+            </div>
+            <div class="form-control mb-4">
+              <label for="listingImage" class="label">Image</label>
+              <input type="file" id="listingImage" @change="handleListingImageUpload" class="file-input file-input-bordered w-full">
+            </div>
+            <button @click="addNewListing" class="btn btn-primary" :disabled="!newListing.imageUrl">Add Listing</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-show="user" class="btm-nav fixed bottom-0 left-0 right-0 bg-white shadow-lg z-10">
+      <button v-if="userRole === 'buyer'" @click="activeTab = 'home'" :class="{ 'active-tab': activeTab === 'home' }">
+        <span class="material-icons">local_shipping</span>
+        <span class="btm-nav-label">Home</span>
+      </button>
+      <button v-if="userRole === 'buyer'" @click="activeTab = 'orders'" :class="{ 'active-tab': activeTab === 'orders' }">
+        <span class="material-icons">receipt_long</span>
+        <span class="btm-nav-label">Orders</span>
+      </button>
+      <button v-if="userRole === 'seller'" @click="activeTab = 'listings'" :class="{ 'active-tab': activeTab === 'listings' }">
+        <span class="material-icons">list</span>
+        <span class="btm-nav-label">Listings</span>
+      </button>
+      <button v-if="userRole === 'seller'" @click="activeTab = 'orders'" :class="{ 'active-tab': activeTab === 'orders' }">
+        <span class="material-icons">receipt_long</span>
+        <span class="btm-nav-label">Orders</span>
+      </button>
+    </div>
+  </div>
+  <script>
+    var firebaseConfig = {
+      apiKey: "AIzaSyDWNPLXqR7XcLM9mDesbIjuD92ctxD5a_8",
+      authDomain: "lrestock.firebaseapp.com",
+      projectId: "lrestock",
+      storageBucket: "lrestock.appspot.com",
+      messagingSenderId: "219825588431",
+      appId: "1:219825588431:web:da726cde8335f4a2ee0fba"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+    const storage = firebase.storage();
+    new Vue({
+      el: '#app',
+      data: {
+        user: null,
+        showLoginForm: true,
+        loginEmail: '',
+        loginPassword: '',
+        signupEmail: '',
+        signupPassword: '',
+        userRole: 'buyer',
+        listings: [],
+        showCart: false,
+        cart: [],
+        showCheckout: false,
+        paymentMethod: null,
+        showOrderConfirmation: false,
+        activeTab: 'home',
+        orders: [],
+        shippingAddress: {
+          street: '',
+          city: '',
+          state: '',
+          zip: ''
+        },
+        showNewListingForm: false,
+        newListing: {
+          title: '',
+          description: '',
+          price: 0,
+          image: null,
+          imageUrl: null
+        },
+        selectedOrder: null
+      },
+      methods: {
+        login() {
+          auth.signInWithEmailAndPassword(this.loginEmail, this.loginPassword)
+            .then((userCredential) => {
+              this.user = userCredential.user;
+              this.fetchListings();
+              this.fetchOrders();
+            })
+            .catch((error) => {
+              console.error("Error logging in: ", error);
+            });
+        },
+        loginAnonymously() {
+          auth.signInAnonymously()
+            .then(() => {
+              this.user = auth.currentUser;
+              this.fetchListings();
+              this.fetchOrders();
+            })
+            .catch((error) => {
+              console.error("Error logging in anonymously: ", error);
+            });
+        },
+        signup() {
+          auth.createUserWithEmailAndPassword(this.signupEmail, this.signupPassword)
+            .then((userCredential) => {
+              this.user = userCredential.user;
+              this.fetchListings();
+              this.fetchOrders();
+            })
+            .catch((error) => {
+              console.error("Error signing up: ", error);
+            });
+        },
+        toggleForm() {
+          this.showLoginForm = !this.showLoginForm;
+        },
+        logout() {
+          auth.signOut()
+            .then(() => {
+              this.user = null;
+              this.listings = [];
+              this.cart = [];
+              this.orders = [];
+              this.userRole = 'buyer';
+              this.activeTab = 'home';
+            })
+            .catch((error) => {
+              console.error("Error logging out: ", error);
+            });
+        },
+        fetchListings() {
+          db.collection('listings').get()
+            .then((querySnapshot) => {
+              this.listings = querySnapshot.docs.map((doc) => ({
+                id: doc.id,
+                quantityToAdd: 1,
+                ...doc.data()
+              }));
+            })
+            .catch((error) => {
+              console.error("Error fetching listings: ", error);
+            });
+        },
+        addToCart(listing) {
+          const existingItemIndex = this.cart.findIndex(item => item.id === listing.id);
+          if (existingItemIndex > -1) {
+            this.cart[existingItemIndex].quantity += listing.quantityToAdd;
+          } else {
+            this.cart.push({
+              ...listing,
+              quantity: listing.quantityToAdd 
+            });
+          }
+        },
+        removeFromCart(item) {
+          const index = this.cart.indexOf(item);
+          if (index > -1) {
+            this.cart.splice(index, 1);
+          }
+        },
+        confirmOrder() {
+          this.showCheckout = false;
+          this.showOrderConfirmation = true;
+          const newOrder = {
+            userId: this.user.uid,
+            items: [...this.cart],
+            totalAmount: this.cart.reduce((total, item) => total + (item.price * item.quantity), 0),
+            timestamp: new Date().toString(),
+            shippingAddress: { ...this.shippingAddress }
+          };
+          db.collection('orders').add(newOrder)
+            .then(() => {
+              this.cart = [];
+              this.shippingAddress = {
+                street: '',
+                city: '',
+                state: '',
+                zip: ''
+              };
+              this.paymentMethod = null;
+              this.fetchOrders();
+            })
+            .catch(error => {
+              console.error("Error creating order: ", error);
+            });
+        },
+        fetchOrders() {
+          if (this.user) {
+            db.collection('orders')
+              .get()
+              .then(querySnapshot => {
+                this.orders = querySnapshot.docs.map(doc => ({
+                  id: doc.id,
+                  ...doc.data()
+                }));
+              })
+              .catch(error => {
+                console.error("Error fetching orders: ", error);
+              });
+          }
+        },
+        showOrderDetails(order) {
+          this.selectedOrder = { ...order };
+        },
+        handleListingImageUpload(event) {
+          this.newListing.image = event.target.files[0];
+          this.uploadListingImage();
+        },
+        uploadListingImage() {
+          if (this.newListing.image) {
+            const storageRef = storage.ref(listingImages/${this.user.uid}/${this.newListing.image.name});
+            storageRef.put(this.newListing.image)
+              .then(() => {
+                return storageRef.getDownloadURL();
+              })
+              .then(imageUrl => {
+                this.newListing.imageUrl = imageUrl;
+              })
+              .catch(error => {
+                console.error("Error uploading listing image: ", error);
+              });
+          }
+        },
+        addNewListing() {
+          if (this.newListing.imageUrl) { 
+                const newListingData = {
+                  title: this.newListing.title,
+                  description: this.newListing.description,
+                  price: this.newListing.price,
+                  userId: this.user.uid,
+                  imageUrl: this.newListing.imageUrl 
+                };
+                db.collection('listings').add(newListingData) 
+              .then(() => {
+                this.showNewListingForm = false;
+                this.newListing = {
+                  title: '',
+                  description: '',
+                  price: 0,
+                  image: null,
+                  imageUrl: null
+                };
+                this.fetchListings();
+              })
+              .catch(error => {
+                console.error("Error adding listing: ", error);
+              });
+          } else {
+            console.error("No image selected for the listing."); 
+          }
+        }
+      },
+      created() {
+        auth.onAuthStateChanged((user) => {
+          this.user = user;
+          if (user) {
+            this.fetchListings();
+            this.fetchOrders();
+          }
+        });
+      },
+      computed: {
+        buyerOrders() {
+          if (this.userRole === 'buyer') {
+            return this.orders.filter(order => order.userId === this.user.uid);
+          } else {
+            return [];
+          }
+        },
+        sellerOrders() {
+          if (this.userRole === 'seller') {
+            return this.orders.filter(order => order.items.some(item => item.userId === this.user.uid));
+          } else {
+            return [];
+          }
+        },
+        sellerListings() {
+          if (this.userRole === 'seller') {
+            return this.listings.filter(listing => listing.userId === this.user.uid);
+          } else {
+            return [];
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
